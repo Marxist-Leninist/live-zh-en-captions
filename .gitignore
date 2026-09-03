@@ -1,0 +1,11 @@
+models/
+*.pt
+*.bin
+__pycache__/
+.venv/
+*.log
+*.pid
+*.npy
+*.wav
+*.mp3
+diagnostics/
