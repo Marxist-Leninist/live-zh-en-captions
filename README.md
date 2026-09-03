@@ -108,3 +108,32 @@ process inside a job object that kills it on teardown.
 ## Licence
 
 MIT — see `LICENSE`.
+
+## Adjusting it while it runs
+
+Right-click the caption bar for a menu:
+
+- **Caption window size** — wider / narrower, taller / shorter, bigger / smaller
+  text, more / less see-through, and reset. Also on the keyboard:
+  `Ctrl+←/→` width, `Ctrl+↑/↓` height, `Ctrl+±` text size.
+- **Audio window (responsiveness)** — 0.8 s to 3.0 s of audio per inference.
+  Shorter reacts faster and reads choppier; longer gives the model more context.
+  Takes effect on the next phrase, no restart.
+- **Speech model** — every model found in `./models` plus any cached sizes,
+  best-first. Medium is the default; Small stays available as the fast option.
+  Switching reloads the model in place.
+- **Translation engine** — Whisper direct (default), or LLM polish on finals.
+
+Every choice is written to `settings.json` beside the script and restored next
+launch. A flag passed explicitly on the command line still wins over the stored
+value, so the scheduled task can pin whatever it likes.
+
+### LLM polish
+
+Set `MESHDIRECT_URL` and `MESHDIRECT_TOKEN` to enable the LLM option. It runs
+**only on final captions**, behind a hard timeout, and falls back to the Whisper
+text if the model does not answer in time. Measured against a MeshDirect
+`auto` deployment it added roughly 8 s per call, which is why it is off by
+default and never touches partial captions — live subtitles need an answer about
+once a second. Left unconfigured, the menu entry reports itself unavailable
+rather than silently doing nothing.
