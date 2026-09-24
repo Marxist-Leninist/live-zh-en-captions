@@ -5,7 +5,7 @@ Pipeline: Windows speaker loopback (SoundCard/WASAPI) -> rolling VAD segmenter -
 faster-whisper multilingual ASR/translation -> always-on-top Tk overlay.
 
 Default mode uses Whisper's native task='translate', avoiding a second text MT pass.
-A two-stage mode (Chinese ASR -> Helsinki OPUS-MT zh-en) is available for comparison.
+A two-stage mode uses Chinese OPUS-MT only when Chinese is detected; other languages fall back to Whisper translation.
 """
 from __future__ import annotations
 
@@ -483,7 +483,7 @@ class TranslateThread(threading.Thread):
                         log(f"OPUS warm error: {exc}\\n{traceback.format_exc()}")
                         self.status_cb("Live captions ready; accurate final translator unavailable")
                 threading.Thread(target=warm_opus, name="opus-warm", daemon=True).start()
-            self.status_cb(f"Ready: system audio -> English ({self.device}/{self.compute_type}, load {load_s:.1f}s)")
+            self.status_cb(f"Ready: auto-detect source -> English ({self.device}/{self.compute_type}, load {load_s:.1f}s)")
             log(f"model ready: whisper={self.model_name} device={self.device} compute={self.compute_type} mode={self.mode} load_s={load_s:.3f}")
             if self.final_model_name and self.device == "cuda" and self.mode == "direct":
                 threading.Thread(
@@ -522,7 +522,7 @@ class TranslateThread(threading.Thread):
                 task = "transcribe" if use_two_stage else "translate"
                 segments, info = decode_model.transcribe(
                     audio,
-                    language="zh",
+                    language=None,
                     task=task,
                     beam_size=1,
                     best_of=1,
@@ -549,7 +549,7 @@ class TranslateThread(threading.Thread):
                         # Hybrid final on a non-Chinese/non-English segment: ask Whisper
                         # for English directly rather than sending the wrong language to OPUS.
                         seg2, _ = decode_model.transcribe(
-                            audio, language="zh", task="translate", beam_size=1, best_of=1,
+                            audio, language=(detected if detected != "unknown" else None), task="translate", beam_size=1, best_of=1,
                             temperature=0.0, repetition_penalty=1.12,
                             no_repeat_ngram_size=3, max_new_tokens=64,
                             condition_on_previous_text=False,
@@ -563,7 +563,7 @@ class TranslateThread(threading.Thread):
                 if text and final and self.mesh is not None and self.mesh.ok:
                     text = self.mesh.translate(text)
                 if text:
-                    self.ui_cb(text, final, infer_s, end_to_end_s)
+                    self.ui_cb(text, final, infer_s, end_to_end_s, detected)
                     log(f"caption final={final} lang={detected} infer={infer_s:.3f}s e2e={end_to_end_s:.3f}s text={text!r}")
             except Exception as exc:
                 log(f"translate error: {exc}\n{traceback.format_exc()}")
@@ -584,10 +584,20 @@ def make_mesh_translator():
     return MeshDirectTranslator(url, token)
 
 
+LANGUAGE_NAMES = {
+    "zh": "Chinese",
+    "hi": "Hindi",
+    "en": "English",
+}
+
+def language_display_name(code: str | None) -> str:
+    key = (code or "unknown").lower().split("-")[0]
+    return LANGUAGE_NAMES.get(key, key.upper() if key != "unknown" else "Unknown")
+
 class CaptionUI:
     def __init__(self, args):
         self.root = tk.Tk()
-        self.root.title("Chinese -> English Live Captions")
+        self.root.title("Chinese / Hindi -> English Live Captions")
         self.root.configure(bg="#050505")
         self.root.attributes("-topmost", True)
         self.settings = load_settings()
@@ -844,8 +854,8 @@ class CaptionUI:
     def post_status(self, text: str):
         self.events.put(("status", text))
 
-    def post_caption(self, text: str, final: bool, infer_s: float, e2e_s: float):
-        self.events.put(("caption", text, final, infer_s, e2e_s))
+    def post_caption(self, text: str, final: bool, infer_s: float, e2e_s: float, detected: str):
+        self.events.put(("caption", text, final, infer_s, e2e_s, detected))
 
     def poll(self):
         try:
@@ -854,7 +864,7 @@ class CaptionUI:
                 if ev[0] == "status":
                     self.status.configure(text=ev[1])
                 elif ev[0] == "caption":
-                    _, text, final, infer_s, e2e_s = ev
+                    _, text, final, infer_s, e2e_s, detected = ev
                     if final:
                         if not self.final_lines or self.final_lines[-1] != text:
                             self.final_lines.append(text)
@@ -866,7 +876,8 @@ class CaptionUI:
                         lines.append(self.current)
                     self.label.configure(text="\n".join(lines[-2:]))
                     if self.visible:
-                        self.status.configure(text=f"Chinese -> English | model {infer_s:.2f}s | queue+model {e2e_s:.2f}s | F9 compact")
+                        source = language_display_name(detected)
+                        self.status.configure(text=f"{source} -> English | model {infer_s:.2f}s | queue+model {e2e_s:.2f}s | F9 compact")
         except queue.Empty:
             pass
         try:
