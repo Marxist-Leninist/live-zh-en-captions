@@ -225,19 +225,13 @@ class SegmenterThread(threading.Thread):
 
 SETTINGS_PATH = Path(__file__).with_name("settings.json")
 
-# Owner-requested default: Medium is the default speech model, with Small selectable
-# in the right-click menu as the fast option. The local models\medium copy is preferred
-# so startup stays offline and deterministic.
-_LOCAL_MEDIUM = Path(__file__).with_name("models") / "medium"
-DEFAULT_MODEL = str(_LOCAL_MEDIUM) if (_LOCAL_MEDIUM / "model.bin").exists() else "medium"
-
 DEFAULT_SETTINGS = {
     "width_frac": 0.90,
     "height_px": 190,
     "font_size": 31,
     "alpha": 0.78,
     "stream_window": 1.6,
-    "model": DEFAULT_MODEL,
+    "model": "",
     "engine": "direct",
 }
 
@@ -408,7 +402,7 @@ class TranslateThread(threading.Thread):
                 f"final model ready: whisper={self.final_model_name} "
                 f"device={self.device} compute={self.final_compute_type} load_s={load_s:.3f}"
             )
-            self.status_cb("Ready: fast partials + accurate final captions")
+            self.status_cb("Ready: fast Small partials + accurate Medium final captions")
         except Exception as exc:
             self.final_model = None
             log(f"final model load error; continuing with primary: {exc}\n{traceback.format_exc()}")
@@ -603,8 +597,6 @@ class CaptionUI:
         if abs(args.alpha - 0.78) > 1e-9:
             self.settings["alpha"] = args.alpha
         self.root.attributes("-alpha", self.settings["alpha"])
-        if getattr(args, "model", ""):
-            self.settings["model"] = args.model
         self.root.overrideredirect(True)
         self.visible = True
         self.events: queue.Queue = queue.Queue()
@@ -661,21 +653,6 @@ class CaptionUI:
         self.root.after(40, self.poll)
 
     # ------------------------------------------------------------------ menu
-    def _current_model_value(self):
-        """Radio value for the speech model actually in use, defaulting to Medium."""
-        current = str(self.settings.get("model") or "")
-        found = discover_models()
-        for name, path in found:
-            if current and current in (name, path):
-                return path
-        for name, path in found:
-            if current and Path(current).name == name:
-                return path
-        for name, path in found:
-            if name == "medium":
-                return path
-        return found[0][1] if found else ""
-
     def _build_menu(self):
         self.menu = tk.Menu(self.root, tearoff=0)
 
@@ -716,7 +693,7 @@ class CaptionUI:
                                      command=lambda v=secs: self.set_audio_window(v))
         self.menu.add_cascade(label="Audio window (responsiveness)", menu=win_menu)
 
-        self.model_var = tk.StringVar(value=self._current_model_value())
+        self.model_var = tk.StringVar(value=str(self.settings.get("model") or ""))
         model_menu = tk.Menu(self.menu, tearoff=0)
         found = discover_models()
         if found:
@@ -903,7 +880,7 @@ class CaptionUI:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Live Chinese system audio to English captions")
-    ap.add_argument("--model", default=DEFAULT_MODEL, help="faster-whisper multilingual model (default: medium; small is the fast option)")
+    ap.add_argument("--model", default="small", help="faster-whisper multilingual model (default: small)")
     ap.add_argument("--cpu", action="store_true", help="force CPU")
     ap.add_argument("--compute-type", default=None, help="CTranslate2 compute type")
     ap.add_argument("--final-model", default=None,
