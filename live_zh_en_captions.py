@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Live Chinese system-audio -> English captions for Windows.
+"""Live Chinese / Hindi / Russian system-audio -> English captions for Windows.
 
 Pipeline: Windows speaker loopback (SoundCard/WASAPI) -> rolling VAD segmenter ->
 faster-whisper multilingual ASR/translation -> always-on-top Tk overlay.
@@ -309,8 +309,10 @@ class MeshDirectTranslator:
             "model": "auto",
             "messages": [
                 {"role": "system", "content":
-                 "Translate Mandarin speech transcripts into natural English subtitles. "
-                 "Output ONLY the English translation: no notes, no pinyin, no quotes."},
+                 "Turn speech transcripts (Mandarin, Hindi or Russian source, possibly "
+                 "already machine-translated) into natural English subtitles. "
+                 "Output ONLY the English translation: no notes, no pinyin or "
+                 "transliteration, no quotes."},
                 {"role": "user", "content": text},
             ],
             "max_tokens": 120,
@@ -587,6 +589,8 @@ def make_mesh_translator():
 LANGUAGE_NAMES = {
     "zh": "Chinese",
     "hi": "Hindi",
+    "ru": "Russian",
+    "uk": "Ukrainian",  # short Russian clips are sometimes detected as Ukrainian; avoid a bare "UK" label
     "en": "English",
 }
 
@@ -597,7 +601,7 @@ def language_display_name(code: str | None) -> str:
 class CaptionUI:
     def __init__(self, args):
         self.root = tk.Tk()
-        self.root.title("Chinese / Hindi -> English Live Captions")
+        self.root.title("Chinese / Hindi / Russian -> English Live Captions")
         self.root.configure(bg="#050505")
         self.root.attributes("-topmost", True)
         self.settings = load_settings()
@@ -890,7 +894,7 @@ class CaptionUI:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Live Chinese system audio to English captions")
+    ap = argparse.ArgumentParser(description="Live Chinese / Hindi / Russian system audio to English captions")
     ap.add_argument("--model", default="small", help="faster-whisper multilingual model (default: small)")
     ap.add_argument("--cpu", action="store_true", help="force CPU")
     ap.add_argument("--compute-type", default=None, help="CTranslate2 compute type")
