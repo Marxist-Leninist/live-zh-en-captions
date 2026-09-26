@@ -21,6 +21,18 @@ in a single model pass. `--mode two-stage` transcribes Chinese first and then
 runs Helsinki OPUS-MT zh→en; `--mode hybrid` does that only on final segments.
 Direct is the fastest and is what the measurements below use.
 
+## Languages
+
+The source language is auto-detected on every window, so there is nothing to
+switch. **Chinese, Hindi and Russian** are the supported inputs and are named in
+the status bar (for example `Russian -> English`); speech in any other language
+Whisper knows is still translated to English and shown with its language code.
+Short Russian clips are occasionally detected as Ukrainian — the caption is
+still English, and the status bar says `Ukrainian`.
+
+OPUS-MT in `two-stage`/`hybrid` is used only for segments detected as Chinese;
+Hindi, Russian and everything else go through Whisper's own translation.
+
 ## Measured performance
 
 Quadro P3200 (Pascal, 4 GB, SM 6.1), Whisper medium, `int8`, 1.6 s window:
